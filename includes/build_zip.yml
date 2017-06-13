@@ -1,3 +1,8 @@
+- name: create build dir
+  file:
+    path: build/
+    state: directory
+
 - name: remove any old zip
   file:
     path: build/{{ zip_name }}

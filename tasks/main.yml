@@ -1,0 +1,49 @@
+# Implement lambda functions
+- include: includes/lambda_init_workspace.yml static=no
+- include: includes/lambda_build_zip.yml static=no
+- include: includes/lambda_copy_to_s3.yml static=no
+
+- name: set cfn file name facts
+  set_fact:
+    lambda_bucket_cfn_file: "{{ role_path}}/files/lambda-bucket-{{ aws_region }}-lambda.cfn.yaml"
+    lambda_code_cfn_file: "{{ role_path}}/files/lambda-code-{{ aws_region }}-lambda.cfn.yaml"
+
+- name: create lambda bucket cfn template
+  template:
+    src: "lambda_bucket.yml.j2"
+    dest: "{{ lambda_bucket_cfn_file }}"
+  check_mode: no
+
+- name: create lambda code cfn template
+  template:
+    src: "lambda_function.yml.j2"
+    dest: "{{ lambda_code_cfn_file }}"
+  check_mode: no
+
+- name: "Lambda Bucket cloudformation stack in {{ aws_region }}"
+  when: execute_cfn
+  cloudformation:
+    stack_name: "lambda-bucket-stack"
+    aws_access_key: "{{ assumed_role.sts_creds.access_key }}"
+    aws_secret_key: "{{ assumed_role.sts_creds.secret_key }}"
+    security_token: "{{ assumed_role.sts_creds.session_token }}"
+    state: "present"
+    region: "{{ aws_region }}"
+    disable_rollback: "false"
+    template: "{{ lambda_bucket_cfn_file }}"
+    tags:
+      Environment: "Production"
+
+- name: "Lambda Code cloudformation stack in {{ aws_region }}"
+  when: execute_cfn
+  cloudformation:
+    stack_name: "lambda-code-stack"
+    aws_access_key: "{{ assumed_role.sts_creds.access_key }}"
+    aws_secret_key: "{{ assumed_role.sts_creds.secret_key }}"
+    security_token: "{{ assumed_role.sts_creds.session_token }}"
+    state: "present"
+    region: "{{ aws_region }}"
+    disable_rollback: "false"
+    template: "{{ lambda_code_cfn_file }}"
+    tags:
+      Environment: "Production"

@@ -1,0 +1,115 @@
+---
+# Warning: this file created dynamically. Do not edit!
+
+Description: Lambda Functions
+Resources:
+  IAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+
+{# create the EmailCreator for default email address #}
+{% if lambda_notify_email|default('none') != 'none' %}
+  DefaultEmailCreator:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Tell the creator about failures in {{ stack_name }} lambda functions.
+      Subscription:
+        - Protocol: email
+          Endpoint: {{ lambda_notify_email }}
+{% endif %}{# end if lambda_notify_email #}
+
+{% for lambda_name, lambda_info in lambda_entry_points.iteritems() %}
+  {{ lambda_name }}LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: {{ lambda_bucket_name }}
+        S3Key: {{ lambda_s3_key }}/{{ lambda_zip_name }}
+{# only need to pass the key here, we use the available variables for other values #}
+        S3ObjectVersion: {{ lookup('s3_version',lambda_s3_key ~ "/" ~ lambda_zip_name) }}
+      Description: {{ lambda_name }} function for {{ stack_name }}
+      Handler: {{ lambda_info.handler }}
+{# Handle minimum memory size for lambda #}
+{% if lambda_info.memory_size|default('128') < 128 %}
+{%   set my_memory_size = 128 %}
+{% else %}
+{%   set my_memory_size = lambda_info.memory_size|default('128') %}
+{% endif %}
+      MemorySize: {{ my_memory_size }}
+      Role: !GetAtt [ IAMRole, Arn ]
+      Runtime: {{ lambda_info.runtime|default('python2.7') }}
+      Timeout: 300
+
+{% if lambda_info.schedule|default("none") != 'none' %}
+  {{ lambda_name }}Schedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Every day at 0800
+      ScheduleExpression: {{ lambda_info.schedule }}
+      Targets:
+        - Id: TriggerMy{{ lambda_name }}LambdaFunction
+          Arn: !GetAtt [ {{ lambda_name }}LambdaFunction, Arn ]
+
+  {{ lambda_name }}LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt [ {{ lambda_name }}LambdaFunction, Arn ]
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt [ {{ lambda_name }}Schedule, Arn ]
+{% endif %}{# end if lambda_info.schedule #}
+
+{# create the EmailCreator only if different email for this function #}
+{% if lambda_info.notify_email|default('none') != 'none' %}
+  {{ lambda_name }}EmailCreator:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Tell the creator about failures in {{ lambda_name }} lambda function.
+      Subscription:
+        - Protocol: email
+          Endpoint: {{ lambda_info.notify_email }}
+{% endif %}{# end if lambda_info.notify_email #}
+
+{# create the Alarm if email is configured #}
+{% if lambda_info.notify_email|default(lambda_notify_email|default('none')) != 'none' %}
+  {{ lambda_name }}LambdaFunctionFailures:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+{% if lambda_info.notify_email is defined %}
+      - Ref: {{ lambda_name }}EmailCreator
+{% else %}
+      - Ref: DefaultEmailCreator
+{% endif %}
+      Namespace: AWS/Lambda
+      Dimensions:
+      - Name: FunctionName
+        Value: !Ref {{ lambda_name }}LambdaFunction
+      MetricName: Errors
+      EvaluationPeriods: '1'
+      Statistic: Sum
+      Period: '60'
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: '0'
+{% endif %}{# end if lambda_info.notify_email|lambda_notify_email #}
+
+{% endfor %}
+

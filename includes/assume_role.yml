@@ -1,0 +1,12 @@
+---
+# Assume the role passed in by the playbook during deployment
+- name: "assume role {{ role_arn }}"
+  sts_assume_role:
+    role_arn: "{{ role_arn }}"
+    role_session_name: "{{ role_session_name }}"
+    region: "{{ aws_region }}"
+  register: assumed_role
+  check_mode: no
+  tags:
+    - always
+  changed_when: false

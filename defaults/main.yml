@@ -1,0 +1,19 @@
+---
+role_arn: 'arn:aws:iam::ACCOUNT_NUMBER:role/ROLE_NAME'
+aws_region: 'us-east-1'
+role_session_name: 'lambda-cfn-stack'
+
+lambda_code_path: "my_lambda_function"
+lambda_zip_name: my_lambda_function.zip
+lambda_notify_email: somebody@example.com
+lambda_s3_key: "{{ aws_account }}/ROLE_NAME"
+lambda_entry_points:
+  helloworld:
+    handler: my_lambda_function/main.lambda_handler
+    schedule: 'none'
+  hellogithub:
+    handler: my_lambda_function/hellogithub.lambda_handler
+    schedule: 'cron(0 8 * * ? *)'  # blank or none
+    notify_email: otherperson@example.com
+    memory_size: 128
+    runtime: python2.7  #  [java8, nodejs, nodejs4.3, nodejs6.10, python2.7, python3.6, dotnetcore1.0]

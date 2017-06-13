@@ -1,0 +1,40 @@
+---
+Description: Configures and deploys global lambda code bucket
+AWSTemplateFormatVersion: '2010-09-09'
+
+################################################################################
+################################################################################
+Resources:
+  ######################
+  # Main Bucket/Policy #
+  ######################
+  LambdaFunctionsBucket:
+    DeletionPolicy: Retain
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: {{ lambda_bucket_name }}
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+        - Id: ExpireNonCurrentVersions
+          # Expire quickly - these are version controlled in git
+          Status: Enabled
+          NoncurrentVersionExpirationInDays: 5
+
+  LambdaFunctionsBucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket:
+        Ref: LambdaFunctionsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AWSLambdaReadAccess"
+            Effect: "Allow"
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action:
+              - "s3:GetObject"
+            Resource:
+              - arn:aws:s3:::{{ lambda_bucket_name}}/common/*
